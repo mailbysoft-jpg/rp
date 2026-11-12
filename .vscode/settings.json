@@ -1,0 +1,5 @@
+{
+    "java.compile.nullAnalysis.mode": "automatic",
+    "cmake.sourceDirectory": "D:/expo/rp/windows",
+    "java.configuration.updateBuildConfiguration": "interactive"
+}
