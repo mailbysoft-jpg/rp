@@ -1,11 +1,66 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
+
+/// Owner's number (same as the Contact tab). Enquiries go here.
+const String _shopPhone = '9792447706';
 
 class DetailPage extends StatelessWidget {
   final String productId;
 
   const DetailPage({super.key, required this.productId});
+
+  String _productSummary(String name, String category, double? price) {
+    final parts = [
+      name,
+      if (category.isNotEmpty) '($category)',
+      if (price != null) '- ₹${price.toStringAsFixed(0)}',
+    ];
+    return parts.join(' ');
+  }
+
+  Future<void> _enquireOnWhatsApp(BuildContext context, String summary) async {
+    final message =
+        'Hi Rp Silver House, I am interested in buying: $summary '
+        '[Product ID: $productId]';
+    final uri = Uri.parse(
+      'https://wa.me/91$_shopPhone?text=${Uri.encodeComponent(message)}',
+    );
+    final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!ok && context.mounted) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Could not open WhatsApp')));
+    }
+  }
+
+  Future<void> _call(BuildContext context) async {
+    final ok = await launchUrl(Uri.parse('tel:$_shopPhone'));
+    if (!ok && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Calling is not available on this device'),
+        ),
+      );
+    }
+  }
+
+  Future<void> _share(BuildContext context, String summary) async {
+    final box = context.findRenderObject() as RenderBox?;
+    await SharePlus.instance.share(
+      ShareParams(
+        text:
+            '$summary\nAvailable at Rp Silver House, Padrauna. '
+            'Call/WhatsApp: +91 $_shopPhone',
+        // Required on iPad so the share popover has an anchor.
+        sharePositionOrigin: box != null
+            ? box.localToGlobal(Offset.zero) & box.size
+            : null,
+      ),
+    );
+  }
 
   Future<Map<String, dynamic>> _getProduct() async {
     final product = await Supabase.instance.client
@@ -55,9 +110,7 @@ class DetailPage extends StatelessWidget {
               ? price.toDouble()
               : double.tryParse(price?.toString() ?? '');
 
-          final double? originalPrice = numericPrice != null
-              ? numericPrice * 1.25
-              : null;
+          final summary = _productSummary(name, category, numericPrice);
 
           return Stack(
             children: [
@@ -122,37 +175,6 @@ class DetailPage extends StatelessWidget {
                                   ),
                                 ),
                               ),
-
-                              // Rating
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 4,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFF24963F),
-                                  borderRadius: BorderRadius.circular(6),
-                                ),
-                                child: const Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Text(
-                                      '4.8',
-                                      style: TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                    SizedBox(width: 3),
-                                    Icon(
-                                      Icons.star,
-                                      color: Colors.white,
-                                      size: 12,
-                                    ),
-                                  ],
-                                ),
-                              ),
                             ],
                           ),
 
@@ -184,30 +206,6 @@ class DetailPage extends StatelessWidget {
                                   color: Color(0xFF0F172A),
                                 ),
                               ),
-
-                              const SizedBox(width: 8),
-
-                              if (originalPrice != null) ...[
-                                Text(
-                                  '₹${originalPrice.toStringAsFixed(0)}',
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    color: Colors.grey.shade500,
-                                    decoration: TextDecoration.lineThrough,
-                                  ),
-                                ),
-
-                                const SizedBox(width: 8),
-
-                                const Text(
-                                  '20% off',
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.bold,
-                                    color: Color(0xFF388E3C),
-                                  ),
-                                ),
-                              ],
                             ],
                           ),
                         ],
@@ -252,7 +250,7 @@ class DetailPage extends StatelessWidget {
                                   ),
                                 ),
                                 Text(
-                                  'Free delivery • 7-day return policy',
+                                  'Available at our store in Padrauna, Kushinagar',
                                   style: TextStyle(
                                     color: Colors.grey,
                                     fontSize: 12,
@@ -287,18 +285,11 @@ class DetailPage extends StatelessWidget {
                           onTap: () => context.pop(),
                         ),
 
-                        Row(
-                          children: [
-                            _RoundIconButton(
-                              icon: Icons.share_outlined,
-                              onTap: () {},
-                            ),
-                            const SizedBox(width: 8),
-                            _RoundIconButton(
-                              icon: Icons.favorite_border,
-                              onTap: () {},
-                            ),
-                          ],
+                        Builder(
+                          builder: (buttonContext) => _RoundIconButton(
+                            icon: Icons.share_outlined,
+                            onTap: () => _share(buttonContext, summary),
+                          ),
                         ),
                       ],
                     ),
@@ -330,7 +321,12 @@ class DetailPage extends StatelessWidget {
                   child: Row(
                     children: [
                       Expanded(
-                        child: OutlinedButton(
+                        child: OutlinedButton.icon(
+                          icon: const Icon(
+                            Icons.call_outlined,
+                            color: Color(0xFFFF9F00),
+                            size: 20,
+                          ),
                           style: OutlinedButton.styleFrom(
                             side: const BorderSide(
                               color: Color(0xFFFF9F00),
@@ -341,9 +337,9 @@ class DetailPage extends StatelessWidget {
                             ),
                             padding: const EdgeInsets.symmetric(vertical: 14),
                           ),
-                          onPressed: () {},
-                          child: const Text(
-                            'ADD TO CART',
+                          onPressed: () => _call(context),
+                          label: const Text(
+                            'CALL',
                             style: TextStyle(
                               color: Color(0xFFFF9F00),
                               fontWeight: FontWeight.bold,
@@ -365,9 +361,9 @@ class DetailPage extends StatelessWidget {
                             padding: const EdgeInsets.symmetric(vertical: 14),
                             elevation: 0,
                           ),
-                          onPressed: () {},
+                          onPressed: () => _enquireOnWhatsApp(context, summary),
                           child: const Text(
-                            'BUY NOW',
+                            'BUY ON WHATSAPP',
                             style: TextStyle(
                               color: Colors.white,
                               fontWeight: FontWeight.bold,
